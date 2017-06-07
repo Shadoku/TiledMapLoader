@@ -3,7 +3,7 @@
 #define chdir _chdir
 #define getcwd _getcwd
 #else
-	#include <unistd.h>
+#include <unistd.h>
 #endif
 
 #include <cstring>
@@ -80,7 +80,8 @@ namespace TiledMapLoader {
 
 			if (tilesetSource) {
 				loadExternalTileset(map, tilesetId, tilesetSource, tilesetElement.getInt("firstgid"));
-			} else {
+			}
+			else {
 				addTileset(map, tilesetId, *tilesetNode);
 			}
 			tilesetNode = tilesetNode->next_sibling("tileset");
@@ -121,14 +122,16 @@ namespace TiledMapLoader {
 			XMLElement element(*tilesetOffsetNode);
 			tileset->setOffsetX(element.getInt("x"));
 			tileset->setOffsetY(element.getInt("y"));
-		} else {
+		}
+		else {
 			tileset->setOffsetX(0);
 			tileset->setOffsetY(0);
 		}
 		tileset->setId(tilesetId);
 		if (firstGid) {
 			tileset->setFirstGid(firstGid);
-		} else {
+		}
+		else {
 			tileset->setFirstGid(tilesetElement.getInt("firstgid"));
 		}
 		tileset->setName(tilesetElement.getString("name"));
@@ -169,32 +172,77 @@ namespace TiledMapLoader {
 		}
 	}
 
+
 	void TiledMapLoader::loadLayers(Map &map, rapidxml::xml_node<> &rootNode) {
 		rapidxml::xml_node<> *layerNode = nullptr;
 		rapidxml::xml_node<> *layerDataNode = nullptr;
+		rapidxml::xml_node<> *currentNode = nullptr;
+		rapidxml::xml_node<> *groupNode = nullptr;
+		rapidxml::xml_node<> *searchNode = nullptr;
+		rapidxml::xml_node<> *mapNode = nullptr;
+		
+		searchNode = rootNode.first_node();
+		mapNode = &rootNode;
+
 		int layerId = 0;
-		layerNode = rootNode.first_node("layer");
-		if (!layerNode) {
-			throw std::logic_error("Invalid tiled map: no layer tag");
-		}
-		while (layerNode) {
-			Layer::Ptr layer(new Layer);
-			layerDataNode = layerNode->first_node("data");
-			if (!layerDataNode) {
-				throw std::logic_error("Invalid tiled map : no layer data tag");
+
+		while (searchNode) {
+			//Search for next layer node
+			while (!layerNode && searchNode) {
+				searchNode = searchNode->next_sibling();
+				if (searchNode && strcmp(searchNode->name(), "group") == 0) {
+					groupNode = searchNode;
+					//throw std::logic_error(searchNode->name());
+					layerNode = searchNode->first_node("layer");
+						//if layerNode is empty, assume group is empty and remove
+						if (!layerNode) {
+							currentNode = searchNode;
+							searchNode = searchNode->parent();
+							searchNode->remove_node(currentNode);
+							//reset searchnode and groupnode
+							searchNode = rootNode.first_node();
+							groupNode = nullptr;
+							currentNode = nullptr;
+
+						}
+
+				}
+				if (searchNode && strcmp(searchNode->name(), "layer") == 0) {
+					layerNode = searchNode;
+				}
+				//return if searchnode is empty
+				if (!searchNode) {
+					return;
+				}
+
 			}
-			XMLElement layerElement(*layerNode);
-			layer->setId(layerId);
-			layer->setName(layerElement.getString("name"));
-			layer->setWidth(layerElement.getInt("width"));
-			layer->setHeight(layerElement.getInt("height"));
-			layer->setVisible(layerElement.getInt("visible", 1));
-			layer->setOpacity(layerElement.getFloat("opacity", 1));
-			layer->parseProperties(*layerNode);
-			loadLayerTiles(map, *layer.get(), *layerDataNode);
-			map.addLayer(std::move(layer));
-			layerNode = layerNode->next_sibling("layer");
-			++layerId;
+			if (layerNode && searchNode) {
+
+				Layer::Ptr layer(new Layer);
+				layerDataNode = layerNode->first_node("data");
+				if (!layerDataNode) {
+					throw std::logic_error("Invalid tiled map : no layer data tag");
+				}
+				XMLElement layerElement(*layerNode);
+				layer->setId(layerId);
+				layer->setName(layerElement.getString("name"));
+				layer->setWidth(layerElement.getInt("width"));
+				layer->setHeight(layerElement.getInt("height"));
+				layer->setVisible(layerElement.getInt("visible", 1));
+				layer->setOpacity(layerElement.getFloat("opacity", 1));
+				layer->parseProperties(*layerNode);
+				//get properties of parent group, if any.
+				if (groupNode) {
+					layer->parseProperties(*groupNode);
+				}
+				loadLayerTiles(map, *layer.get(), *layerDataNode);
+				map.addLayer(std::move(layer));
+				if (groupNode) { groupNode->remove_node(layerNode); }
+				else { mapNode->remove_node(layerNode); }
+				searchNode = rootNode.first_node();
+				++layerId;
+				layerNode = nullptr;	
+			}
 		}
 	}
 
@@ -212,7 +260,7 @@ namespace TiledMapLoader {
 			if (!gids) {
 				throw std::logic_error("Uncompression failed: can't allocate memory");
 			}
-			if (mz_uncompress(gids, &uncompressSize, (unsigned char *) base64Tiles.c_str(), base64Tiles.length()) != MZ_OK) {
+			if (mz_uncompress(gids, &uncompressSize, (unsigned char *)base64Tiles.c_str(), base64Tiles.length()) != MZ_OK) {
 				throw std::logic_error("Zlib error: uncompression failed");
 			}
 			while (mapIterator < numberOfGids) {
