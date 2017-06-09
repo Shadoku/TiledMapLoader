@@ -13,4 +13,4 @@ Loads layers in groups
 
 Will not load layers in nested groups
 
-crashed on empty nested groups
+crashes on empty nested groups
